@@ -79,6 +79,8 @@ export default function App() {
   } | null>(null);
   const [activeHymnNumber, setActiveHymnNumber] = useState<number>(1);
   const [isPlayingHymn, setIsPlayingHymn] = useState<boolean>(false);
+  const [isVoiceActive, setIsVoiceActive] = useState<boolean>(true); // Voice active on every song
+  const [currentVoicedSection, setCurrentVoicedSection] = useState<string | null>(null);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -772,9 +774,13 @@ export default function App() {
           onPlayHymn={(num) => {
             setActiveHymnNumber(num);
             setIsPlayingHymn(true);
+            setIsVoiceActive(true);
           }}
           onTogglePlayPause={() => setIsPlayingHymn((prev) => !prev)}
           onShareHymnToChat={handleSendVerseToStudyGroup}
+          isVoiceActive={isVoiceActive}
+          onToggleVoiceActive={() => setIsVoiceActive((prev) => !prev)}
+          currentVoicedSection={currentVoicedSection}
         />
 
         {/* SECTION 4: GRUPOS REALES DE ESTUDIO BÍBLICO Y CHAT EN VIVO */}
@@ -1017,6 +1023,10 @@ export default function App() {
         isPlaying={isPlayingHymn}
         onHymnNumberChange={setActiveHymnNumber}
         onPlayingChange={setIsPlayingHymn}
+        isVoiceActive={isVoiceActive}
+        onVoiceActiveChange={setIsVoiceActive}
+        currentVoicedSection={currentVoicedSection}
+        onVoicedSectionChange={setCurrentVoicedSection}
       />
 
       {/* JOIN WEBSITE MODAL */}
