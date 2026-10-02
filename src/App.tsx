@@ -79,8 +79,6 @@ export default function App() {
   } | null>(null);
   const [activeHymnNumber, setActiveHymnNumber] = useState<number>(1);
   const [isPlayingHymn, setIsPlayingHymn] = useState<boolean>(false);
-  const [isVoiceActive, setIsVoiceActive] = useState<boolean>(true); // Voice active on every song
-  const [currentVoicedSection, setCurrentVoicedSection] = useState<string | null>(null);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -767,20 +765,16 @@ export default function App() {
           onSendVerseToStudyGroup={handleSendVerseToStudyGroup}
         />
 
-        {/* SECTION 3B: GRAN HIMNARIO CRISTIANO DE 224.344.224 HIMNOS CANTADOS CON VOZ */}
+        {/* SECTION 3B: GRAN HIMNARIO CRISTIANO DE 224.344.224 HIMNOS */}
         <HymnalSection
           activeHymnNumber={activeHymnNumber}
           isPlayingHymn={isPlayingHymn}
           onPlayHymn={(num) => {
             setActiveHymnNumber(num);
             setIsPlayingHymn(true);
-            setIsVoiceActive(true);
           }}
           onTogglePlayPause={() => setIsPlayingHymn((prev) => !prev)}
           onShareHymnToChat={handleSendVerseToStudyGroup}
-          isVoiceActive={isVoiceActive}
-          onToggleVoiceActive={() => setIsVoiceActive((prev) => !prev)}
-          currentVoicedSection={currentVoicedSection}
         />
 
         {/* SECTION 4: GRUPOS REALES DE ESTUDIO BÍBLICO Y CHAT EN VIVO */}
@@ -1017,16 +1011,12 @@ export default function App() {
         </button>
       </div>
 
-      {/* RELAXING CHRISTIAN AMBIENT MUSIC PLAYER (224,344,224 SUNG MP3 HYMNS) */}
+      {/* RELAXING CHRISTIAN AMBIENT MUSIC PLAYER (224,344,224 HYMNS) */}
       <AmbientMusicPlayer
         currentHymnNumber={activeHymnNumber}
         isPlaying={isPlayingHymn}
         onHymnNumberChange={setActiveHymnNumber}
         onPlayingChange={setIsPlayingHymn}
-        isVoiceActive={isVoiceActive}
-        onVoiceActiveChange={setIsVoiceActive}
-        currentVoicedSection={currentVoicedSection}
-        onVoicedSectionChange={setCurrentVoicedSection}
       />
 
       {/* JOIN WEBSITE MODAL */}

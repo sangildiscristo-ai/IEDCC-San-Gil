@@ -16,9 +16,6 @@ import {
   Volume2,
   Share2,
   Hash,
-  Mic,
-  MicOff,
-  Sparkles,
 } from 'lucide-react';
 import {
   TOTAL_HYMNS_COUNT,
@@ -29,10 +26,6 @@ import {
   CORE_10_HYMNS,
   RECORDED_VOCAL_HYMNS,
 } from '../data/hymnsCatalogData';
-import {
-  hymnVoiceEngine,
-  HymnVoiceSection,
-} from '../utils/voiceSynthesis';
 
 interface HymnalSectionProps {
   activeHymnNumber: number;
@@ -40,9 +33,6 @@ interface HymnalSectionProps {
   onPlayHymn: (hymnNumber: number) => void;
   onTogglePlayPause: () => void;
   onShareHymnToChat?: (reference: string, text: string) => void;
-  isVoiceActive?: boolean;
-  onToggleVoiceActive?: () => void;
-  currentVoicedSection?: string | null;
 }
 
 const PAGE_SIZE = 12;
@@ -54,9 +44,6 @@ export const HymnalSection: React.FC<HymnalSectionProps> = ({
   onPlayHymn,
   onTogglePlayPause,
   onShareHymnToChat,
-  isVoiceActive = true,
-  onToggleVoiceActive,
-  currentVoicedSection,
 }) => {
   const [selectedHymnNumber, setSelectedHymnNumber] =
     useState<number>(activeHymnNumber || 1);
@@ -66,7 +53,6 @@ export const HymnalSection: React.FC<HymnalSectionProps> = ({
     'Todos' | HymnCategory
   >('Todos');
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [isolatedVoicingSection, setIsolatedVoicingSection] = useState<string | null>(null);
 
   const displayedHymn: HymnItem = useMemo(
     () => getHymnByNumber(selectedHymnNumber),
@@ -101,15 +87,6 @@ export const HymnalSection: React.FC<HymnalSectionProps> = ({
     const randomNum = Math.floor(Math.random() * TOTAL_HYMNS_COUNT) + 1;
     handleJumpToNumber(randomNum);
     onPlayHymn(randomNum);
-  };
-
-  // Play a specific stanza or chorus immediately with devotional voice
-  const handleSpeakSingleSection = (text: string, section: HymnVoiceSection, label: string) => {
-    setIsolatedVoicingSection(section);
-    hymnVoiceEngine.speakSingleSnippet(text, section, label, {
-      onEnd: () => setIsolatedVoicingSection(null),
-      onError: () => setIsolatedVoicingSection(null),
-    });
   };
 
   // Compute current page of hymns from the 224,344,224 catalog
@@ -177,11 +154,6 @@ export const HymnalSection: React.FC<HymnalSectionProps> = ({
     return list;
   }, [searchQuery, selectedCategory, currentPage]);
 
-  const isSectionActive = (sectionKey: string) => {
-    if (isolatedVoicingSection === sectionKey) return true;
-    return isCurrentDisplayedPlaying && currentVoicedSection === sectionKey;
-  };
-
   return (
     <section
       id="himnario"
@@ -191,19 +163,20 @@ export const HymnalSection: React.FC<HymnalSectionProps> = ({
         {/* Section Header */}
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 border-b border-slate-200 dark:border-slate-800 pb-8">
           <div className="space-y-3 max-w-3xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 dark:bg-blue-950/80 border border-blue-300 dark:border-blue-700/60 rounded-full text-xs font-semibold text-blue-800 dark:text-blue-300">
-              <Mic className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-              <span>Voz Activa en Cada Canción · Cantado y Declamado en Español</span>
-            </div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-blue-700 dark:text-blue-400">
+              Alabanza Congregacional · Catálogo Universal · #1 al #224.344.224
+            </p>
             <h2 className="font-serif text-3xl sm:text-4xl font-bold text-slate-950 dark:text-white tracking-tight">
-              Gran Himnario Cristiano: 224.344.224 Himnos con Voz
+              Gran Himnario Cristiano: 224.344.224 Himnos
             </h2>
             <p className="text-base text-slate-600 dark:text-slate-300 leading-relaxed">
-              Cada canción incluye <strong className="font-semibold text-slate-900 dark:text-white">voz humana en español</strong> que recita y canta las estrofas y el coro en armonía con la música, disponible para cualquiera de los{' '}
+              Explora, lee la letra completa y escucha cualquiera de los{' '}
               <strong className="font-semibold text-slate-900 dark:text-white font-mono">
                 224.344.224
               </strong>{' '}
-              himnos cristianos desde el <span className="font-mono font-semibold">#01</span> hasta el{' '}
+              himnos cristianos disponibles en nuestro catálogo universal desde
+              el Himno <span className="font-mono font-semibold">#01</span>{' '}
+              hasta el Himno{' '}
               <span className="font-mono font-semibold">#224.344.224</span>.
             </p>
           </div>
@@ -229,13 +202,13 @@ export const HymnalSection: React.FC<HymnalSectionProps> = ({
               type="submit"
               className="px-4 py-2.5 bg-blue-700 hover:bg-blue-600 text-white text-sm font-semibold rounded-lg transition-colors whitespace-nowrap"
             >
-              Ir con Voz
+              Ir al Himno
             </button>
             <button
               type="button"
               onClick={handleRandomHymn}
               className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white text-sm font-semibold rounded-lg inline-flex items-center justify-center gap-2 transition-colors whitespace-nowrap"
-              title="Escuchar un himno aleatorio con voz entre los 224.344.224 himnos"
+              title="Escuchar un himno aleatorio entre los 224.344.224 himnos"
             >
               <Shuffle className="w-4 h-4 text-blue-400 shrink-0" />
               <span>Aleatorio</span>
@@ -246,9 +219,8 @@ export const HymnalSection: React.FC<HymnalSectionProps> = ({
         {/* Quick Milestone Jump Bar (#1 to #224.344.224) */}
         <div className="flex flex-wrap items-center justify-between gap-4 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 mr-2 flex items-center gap-1">
-              <Mic className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-              Saltos con voz en el catálogo:
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 mr-2">
+              Saltos rápidos en los 224.344.224 himnos:
             </span>
             {[
               { label: 'Himno #01', num: 1 },
@@ -307,9 +279,9 @@ export const HymnalSection: React.FC<HymnalSectionProps> = ({
               </div>
             </div>
 
-            {/* Primary Audio & Voice Actions */}
+            {/* Primary Audio Action */}
             <div className="space-y-3">
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+              <div className="flex flex-wrap items-center gap-3">
                 <button
                   type="button"
                   onClick={() => {
@@ -324,40 +296,15 @@ export const HymnalSection: React.FC<HymnalSectionProps> = ({
                   {isCurrentDisplayedPlaying ? (
                     <>
                       <Pause className="w-4 h-4 shrink-0" />
-                      <span>Pausar Canción #{displayedHymn.formattedNumber}</span>
+                      <span>Pausar Himno #{displayedHymn.formattedNumber}</span>
                     </>
                   ) : (
                     <>
                       <Play className="w-4 h-4 fill-current shrink-0" />
-                      <span>Cantar Himno #{displayedHymn.formattedNumber} con Voz</span>
+                      <span>Escuchar Himno #{displayedHymn.formattedNumber}</span>
                     </>
                   )}
                 </button>
-
-                {onToggleVoiceActive && (
-                  <button
-                    type="button"
-                    onClick={onToggleVoiceActive}
-                    className={`px-4 py-3 rounded-xl border text-xs font-semibold inline-flex items-center justify-center gap-2 transition-colors ${
-                      isVoiceActive
-                        ? 'bg-blue-950/80 border-blue-500 text-blue-300 hover:bg-blue-900/80'
-                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
-                    }`}
-                    title={isVoiceActive ? 'Voz activada' : 'Voz desactivada'}
-                  >
-                    {isVoiceActive ? (
-                      <>
-                        <Mic className="w-4 h-4 text-blue-400 shrink-0" />
-                        <span>Voz: SÍ</span>
-                      </>
-                    ) : (
-                      <>
-                        <MicOff className="w-4 h-4 shrink-0" />
-                        <span>Voz: NO</span>
-                      </>
-                    )}
-                  </button>
-                )}
               </div>
 
               {/* Prev / Next Across All 224,344,224 Hymns */}
@@ -415,154 +362,65 @@ export const HymnalSection: React.FC<HymnalSectionProps> = ({
             <div className="pt-4 border-t border-slate-800/90 flex items-center justify-between text-xs text-slate-400">
               <span className="inline-flex items-center gap-1.5">
                 <Volume2 className="w-4 h-4 text-blue-400 shrink-0" />
-                <span>Voz y Música Activas</span>
+                <span>Audio MP3 Activo</span>
               </span>
               <span className="font-mono text-slate-300">
-                224.344.224 Canciones
+                Total: 224.344.224 himnos
               </span>
             </div>
           </div>
 
-          {/* Right 7 Cols: Complete Stanzas & Chorus Lyrics Reader with Interactive Voice */}
+          {/* Right 7 Cols: Complete Stanzas & Chorus Lyrics Reader */}
           <div className="lg:col-span-7 bg-white dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4 gap-2">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
               <div className="flex items-center gap-2.5">
                 <BookOpen className="w-5 h-5 text-blue-700 dark:text-blue-400 shrink-0" />
                 <div>
                   <h4 className="font-serif text-lg font-bold text-slate-950 dark:text-white">
-                    Letra con Voz: Himno #{displayedHymn.formattedNumber}
+                    Letra Congregacional del Himno #{displayedHymn.formattedNumber}
                   </h4>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Lectura bíblica: {displayedHymn.scriptureRef} · Haz clic en cualquier estrofa para escuchar su voz
+                    Lectura bíblica de respaldo: {displayedHymn.scriptureRef} (Reina-Valera 1960)
                   </p>
                 </div>
               </div>
-              <span className="text-xs font-mono text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-900 px-2 py-1 rounded self-start sm:self-auto">
-                {displayedHymn.stanzas.length} Estrofas + Coro con Voz
+              <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
+                {displayedHymn.stanzas.length} Estrofas + Coro
               </span>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-5">
               {/* Stanza I */}
-              <div
-                className={`p-4 rounded-xl border transition-all ${
-                  isSectionActive('stanza-0')
-                    ? 'border-blue-600 bg-blue-50/80 dark:bg-blue-950/60 ring-2 ring-blue-500/50 shadow-md'
-                    : 'border-slate-200 dark:border-slate-800/80 hover:border-blue-300 dark:hover:border-blue-800'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2 mb-1.5">
-                  <span className="text-xs font-mono uppercase tracking-wider text-blue-700 dark:text-blue-400 font-bold flex items-center gap-1.5">
-                    <span>Estrofa I</span>
-                    {isSectionActive('stanza-0') && (
-                      <span className="px-1.5 py-0.2 bg-blue-600 text-white text-[10px] rounded animate-pulse">
-                        Voz sonando ahora
-                      </span>
-                    )}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleSpeakSingleSection(
-                        displayedHymn.stanzas[0],
-                        'stanza-0',
-                        'Estrofa I'
-                      )
-                    }
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-slate-100 dark:bg-slate-900 hover:bg-blue-600 hover:text-white text-slate-700 dark:text-slate-300 text-xs font-medium transition-colors"
-                    title="Escuchar Estrofa I con voz"
-                  >
-                    <Mic className="w-3 h-3 text-blue-500" />
-                    <span>Oír Estrofa</span>
-                  </button>
-                </div>
+              <div className="space-y-1.5">
+                <p className="text-xs font-mono uppercase tracking-wider text-blue-700 dark:text-blue-400 font-semibold">
+                  Estrofa I
+                </p>
                 <p className="font-serif text-base sm:text-lg text-slate-800 dark:text-slate-200 leading-relaxed">
                   {displayedHymn.stanzas[0]}
                 </p>
               </div>
 
               {/* Chorus */}
-              <div
-                className={`p-5 rounded-xl border-l-4 border-blue-700 dark:border-blue-500 transition-all ${
-                  isSectionActive('chorus-1') || isSectionActive('chorus-2') || isSectionActive('chorus-final')
-                    ? 'border-blue-600 bg-blue-100/90 dark:bg-blue-950/80 ring-2 ring-blue-500/50 shadow-md'
-                    : 'bg-blue-50/70 dark:bg-blue-950/30 border-r border-t border-b border-blue-100 dark:border-blue-900/40'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2 mb-1.5">
-                  <span className="text-xs font-mono uppercase tracking-wider text-blue-800 dark:text-blue-300 font-bold flex items-center gap-1.5">
-                    <span>Coro Congregacional</span>
-                    {(isSectionActive('chorus-1') || isSectionActive('chorus-2') || isSectionActive('chorus-final')) && (
-                      <span className="px-1.5 py-0.2 bg-blue-700 text-white text-[10px] rounded animate-pulse">
-                        Voz cantando el coro
-                      </span>
-                    )}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleSpeakSingleSection(
-                        `Coro: ${displayedHymn.chorus}`,
-                        'chorus-1',
-                        'Coro Congregacional'
-                      )
-                    }
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-white dark:bg-slate-900 hover:bg-blue-700 hover:text-white text-blue-900 dark:text-blue-200 text-xs font-semibold transition-colors shadow-sm"
-                    title="Cantar el coro con voz"
-                  >
-                    <Mic className="w-3 h-3 text-blue-600" />
-                    <span>Cantar Coro</span>
-                  </button>
-                </div>
+              <div className="p-4 sm:p-5 bg-blue-50/70 dark:bg-blue-950/30 border-l-4 border-blue-700 dark:border-blue-500 rounded-r-xl space-y-1.5">
+                <p className="text-xs font-mono uppercase tracking-wider text-blue-800 dark:text-blue-300 font-semibold">
+                  Coro Congregacional
+                </p>
                 <p className="font-serif text-base sm:text-lg font-semibold text-slate-950 dark:text-white leading-relaxed italic">
                   “{displayedHymn.chorus}”
                 </p>
               </div>
 
               {/* Remaining Stanzas */}
-              {displayedHymn.stanzas.slice(1).map((stanza, idx) => {
-                const sectionKey = `stanza-${idx + 1}` as HymnVoiceSection;
-                const stanzaNumber = idx === 0 ? 'II' : idx === 1 ? 'III' : `${idx + 2}`;
-                return (
-                  <div
-                    key={idx}
-                    className={`p-4 rounded-xl border transition-all ${
-                      isSectionActive(sectionKey)
-                        ? 'border-blue-600 bg-blue-50/80 dark:bg-blue-950/60 ring-2 ring-blue-500/50 shadow-md'
-                        : 'border-slate-200 dark:border-slate-800/80 hover:border-blue-300 dark:hover:border-blue-800'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2 mb-1.5">
-                      <span className="text-xs font-mono uppercase tracking-wider text-blue-700 dark:text-blue-400 font-bold flex items-center gap-1.5">
-                        <span>Estrofa {stanzaNumber}</span>
-                        {isSectionActive(sectionKey) && (
-                          <span className="px-1.5 py-0.2 bg-blue-600 text-white text-[10px] rounded animate-pulse">
-                            Voz sonando ahora
-                          </span>
-                        )}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleSpeakSingleSection(
-                            stanza,
-                            sectionKey,
-                            `Estrofa ${stanzaNumber}`
-                          )
-                        }
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-slate-100 dark:bg-slate-900 hover:bg-blue-600 hover:text-white text-slate-700 dark:text-slate-300 text-xs font-medium transition-colors"
-                        title={`Escuchar Estrofa ${stanzaNumber} con voz`}
-                      >
-                        <Mic className="w-3 h-3 text-blue-500" />
-                        <span>Oír Estrofa</span>
-                      </button>
-                    </div>
-                    <p className="font-serif text-base sm:text-lg text-slate-800 dark:text-slate-200 leading-relaxed">
-                      {stanza}
-                    </p>
-                  </div>
-                );
-              })}
+              {displayedHymn.stanzas.slice(1).map((stanza, idx) => (
+                <div key={idx} className="space-y-1.5">
+                  <p className="text-xs font-mono uppercase tracking-wider text-blue-700 dark:text-blue-400 font-semibold">
+                    Estrofa {idx === 0 ? 'II' : idx === 1 ? 'III' : idx + 2}
+                  </p>
+                  <p className="font-serif text-base sm:text-lg text-slate-800 dark:text-slate-200 leading-relaxed">
+                    {stanza}
+                  </p>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -571,14 +429,11 @@ export const HymnalSection: React.FC<HymnalSectionProps> = ({
         <div className="bg-white dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <h3 className="font-serif text-xl font-bold text-slate-950 dark:text-white flex items-center gap-2">
-                <span>Catálogo de los 224.344.224 Himnos con Voz</span>
-                <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 text-xs rounded-full font-sans font-medium">
-                  Voz Incluida
-                </span>
+              <h3 className="font-serif text-xl font-bold text-slate-950 dark:text-white">
+                Catálogo General de los 224.344.224 Himnos
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Selecciona cualquier himno para escucharlo inmediatamente cantado y declamado con voz humana en español
+                Busca por número exacto (1 a 224.344.224), título, pasaje bíblico o explora por páginas
               </p>
             </div>
 
@@ -654,9 +509,8 @@ export const HymnalSection: React.FC<HymnalSectionProps> = ({
                       <span className="text-blue-700 dark:text-blue-400 font-semibold">
                         HIMNO #{hymn.formattedNumber}
                       </span>
-                      <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                        <Mic className="w-3 h-3" />
-                        <span>Con Voz</span>
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                        {hymn.musicalKey}
                       </span>
                     </div>
 
@@ -695,12 +549,12 @@ export const HymnalSection: React.FC<HymnalSectionProps> = ({
                       {isPlayingThis ? (
                         <>
                           <Pause className="w-3.5 h-3.5 shrink-0" />
-                          <span>Pausar Voz</span>
+                          <span>Pausar</span>
                         </>
                       ) : (
                         <>
                           <Play className="w-3.5 h-3.5 fill-current shrink-0" />
-                          <span>Cantar con Voz</span>
+                          <span>Escuchar</span>
                         </>
                       )}
                     </button>
@@ -723,7 +577,7 @@ export const HymnalSection: React.FC<HymnalSectionProps> = ({
             <p className="text-xs text-slate-600 dark:text-slate-400 font-mono">
               Página {currentPage.toLocaleString('es-CO')} de{' '}
               {TOTAL_PAGES.toLocaleString('es-CO')} · Total:{' '}
-              {TOTAL_HYMNS_COUNT.toLocaleString('es-CO')} canciones con voz
+              {TOTAL_HYMNS_COUNT.toLocaleString('es-CO')} himnos
             </p>
 
             <div className="flex flex-wrap items-center gap-2">

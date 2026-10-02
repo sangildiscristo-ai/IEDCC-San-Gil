@@ -15,33 +15,20 @@ import {
   SkipForward,
   Upload,
   Check,
-  Mic,
-  MicOff,
   Shuffle,
   Hash,
-  Sparkles,
 } from 'lucide-react';
 import {
   TOTAL_HYMNS_COUNT,
   HymnItem,
   getHymnByNumber,
 } from '../data/hymnsCatalogData';
-import {
-  hymnVoiceEngine,
-  HymnVoiceSection,
-} from '../utils/voiceSynthesis';
-
-export type VoiceMode = 'both' | 'voice-only' | 'music-only';
 
 export interface AmbientMusicPlayerProps {
   currentHymnNumber?: number;
   isPlaying?: boolean;
   onHymnNumberChange?: (hymnNumber: number) => void;
   onPlayingChange?: (playing: boolean) => void;
-  isVoiceActive?: boolean;
-  onVoiceActiveChange?: (active: boolean) => void;
-  currentVoicedSection?: string | null;
-  onVoicedSectionChange?: (section: string | null) => void;
 }
 
 function formatSeconds(sec: number): string {
@@ -56,36 +43,22 @@ export const AmbientMusicPlayer: React.FC<AmbientMusicPlayerProps> = ({
   isPlaying: controlledIsPlaying,
   onHymnNumberChange,
   onPlayingChange,
-  isVoiceActive: controlledIsVoiceActive,
-  onVoiceActiveChange,
-  onVoicedSectionChange,
 }) => {
   const [internalHymnNumber, setInternalHymnNumber] = useState<number>(1);
   const [internalIsPlaying, setInternalIsPlaying] = useState<boolean>(false);
-  const [internalVoiceActive, setInternalVoiceActive] = useState<boolean>(true); // Voice ON by default
-  const [voiceMode, setVoiceMode] = useState<VoiceMode>('both');
-  const [voiceVolume, setVoiceVolume] = useState<number>(1.0);
-  const [musicVolume, setMusicVolume] = useState<number>(0.45); // Balance music below voice
+  const [volume, setVolume] = useState<number>(0.75);
   const [isMuted, setIsMuted] = useState<boolean>(false);
-  const [currentSectionLabel, setCurrentSectionLabel] = useState<string>('Voz Lista');
-  const [activeVoicedSection, setActiveVoicedSection] = useState<HymnVoiceSection | null>(null);
-
-  const [customOverrides, setCustomOverrides] = useState<
-    Record<number, { title: string; mp3Url: string }>
-  >({});
-  const [jumpInput, setJumpInput] = useState<string>('');
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [duration, setDuration] = useState<number>(0);
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [hasAutoStarted, setHasAutoStarted] = useState<boolean>(false);
+  const [jumpInput, setJumpInput] = useState<string>('');
   const [uploadStatus, setUploadStatus] = useState<string>('');
-  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [selectedVoiceURI, setSelectedVoiceURI] = useState<string>('');
-  const [voiceRate, setVoiceRate] = useState<number>(0.94);
-  const [hasStudioAudio, setHasStudioAudio] = useState<boolean>(false);
+  const [customOverrides, setCustomOverrides] = useState<
+    Record<number, { title: string; mp3Url: string }>
+  >({});
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const studioVoiceAudioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const activeHymnNumber =
@@ -97,11 +70,6 @@ export const AmbientMusicPlayer: React.FC<AmbientMusicPlayerProps> = ({
     typeof controlledIsPlaying === 'boolean'
       ? controlledIsPlaying
       : internalIsPlaying;
-
-  const isVoiceActive =
-    typeof controlledIsVoiceActive === 'boolean'
-      ? controlledIsVoiceActive
-      : internalVoiceActive;
 
   const setActiveHymnNumber = useCallback(
     (nextNum: number) => {
@@ -123,23 +91,6 @@ export const AmbientMusicPlayer: React.FC<AmbientMusicPlayerProps> = ({
     [onPlayingChange]
   );
 
-  const setVoiceActiveState = useCallback(
-    (nextActive: boolean) => {
-      setInternalVoiceActive(nextActive);
-      onVoiceActiveChange?.(nextActive);
-      if (!nextActive) {
-        hymnVoiceEngine.stop();
-        if (studioVoiceAudioRef.current) {
-          studioVoiceAudioRef.current.pause();
-        }
-        setActiveVoicedSection(null);
-        onVoicedSectionChange?.(null);
-        setCurrentSectionLabel('Voz desactivada');
-      }
-    },
-    [onVoiceActiveChange, onVoicedSectionChange]
-  );
-
   const currentTrack: HymnItem = useMemo(() => {
     const base = getHymnByNumber(activeHymnNumber);
     const override = customOverrides[activeHymnNumber];
@@ -153,171 +104,42 @@ export const AmbientMusicPlayer: React.FC<AmbientMusicPlayerProps> = ({
     return base;
   }, [activeHymnNumber, customOverrides]);
 
-  // Load available Spanish voices from browser
-  useEffect(() => {
-    const updateVoices = () => {
-      const voices = hymnVoiceEngine.getAvailableSpanishVoices();
-      setAvailableVoices(voices);
-      const pref = hymnVoiceEngine.getPreferredSpanishVoice();
-      if (pref && !selectedVoiceURI) {
-        setSelectedVoiceURI(pref.voiceURI);
-      }
-    };
-
-    updateVoices();
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.onvoiceschanged = updateVoices;
-    }
-  }, [selectedVoiceURI]);
-
-  // Sync voice settings changes
-  useEffect(() => {
-    hymnVoiceEngine.updateSettings({
-      rate: voiceRate,
-      volume: isMuted ? 0 : voiceVolume,
-      voiceURI: selectedVoiceURI || undefined,
-    });
-  }, [voiceRate, voiceVolume, isMuted, selectedVoiceURI]);
-
-  // Check if studio voice file is available on server
-  useEffect(() => {
-    let isSubscribed = true;
-    async function checkStudioVoice() {
-      try {
-        const res = await fetch(`/api/hymn-voice/${activeHymnNumber}`, {
-          method: 'HEAD',
-        });
-        if (isSubscribed) {
-          setHasStudioAudio(res.ok);
-        }
-      } catch {
-        if (isSubscribed) {
-          setHasStudioAudio(false);
-        }
-      }
-    }
-    checkStudioVoice();
-    return () => {
-      isSubscribed = false;
-    };
-  }, [activeHymnNumber]);
-
-  // Sync background music volume
+  // Sync volume & mute to the HTML5 <audio> element
   useEffect(() => {
     if (audioRef.current) {
-      const effectiveMusicVolume =
-        isMuted || voiceMode === 'voice-only' ? 0 : musicVolume;
-      audioRef.current.volume = effectiveMusicVolume;
-      audioRef.current.muted = isMuted || voiceMode === 'voice-only';
+      audioRef.current.volume = isMuted ? 0 : volume;
+      audioRef.current.muted = isMuted;
     }
-  }, [musicVolume, isMuted, voiceMode]);
+  }, [volume, isMuted]);
 
-  // Sync studio audio voice volume
-  useEffect(() => {
-    if (studioVoiceAudioRef.current) {
-      const effectiveVoiceVol =
-        isMuted || voiceMode === 'music-only' || !isVoiceActive ? 0 : voiceVolume;
-      studioVoiceAudioRef.current.volume = effectiveVoiceVol;
-      studioVoiceAudioRef.current.muted = isMuted || !isVoiceActive;
-    }
-  }, [voiceVolume, isMuted, voiceMode, isVoiceActive]);
-
-  // Start voice recitation for current hymn
-  const startVoiceForCurrentHymn = useCallback(() => {
-    if (!isVoiceActive || voiceMode === 'music-only') {
-      return;
-    }
-
-    // If studio AI voice is available on server, play it via studioVoiceAudioRef
-    if (hasStudioAudio && studioVoiceAudioRef.current) {
-      hymnVoiceEngine.stop();
-      studioVoiceAudioRef.current.currentTime = 0;
-      studioVoiceAudioRef.current
-        .play()
-        .then(() => {
-          setCurrentSectionLabel('Voz de Estudio con IA Activa');
-          setActiveVoicedSection('intro');
-          onVoicedSectionChange?.('intro');
-        })
-        .catch(() => {
-          // Fall back to Web Speech synthesis
-          startWebSpeech();
-        });
-      return;
-    }
-
-    startWebSpeech();
-
-    function startWebSpeech() {
-      setCurrentSectionLabel('Iniciando voz devocional...');
-      hymnVoiceEngine.speakFullHymn(currentTrack, {
-        onSectionStart: (section, label) => {
-          setActiveVoicedSection(section);
-          setCurrentSectionLabel(label);
-          onVoicedSectionChange?.(section);
-        },
-        onEnd: () => {
-          setActiveVoicedSection('complete');
-          setCurrentSectionLabel('Himno completado');
-          onVoicedSectionChange?.('complete');
-        },
-        onError: () => {
-          setCurrentSectionLabel('Voz lista');
-        },
-      });
-    }
-  }, [isVoiceActive, voiceMode, hasStudioAudio, currentTrack, onVoicedSectionChange]);
-
-  // Play / Pause handling
-  const playAll = useCallback(async () => {
+  const playCurrentAudio = useCallback(async () => {
+    if (!audioRef.current) return;
     try {
-      // 1. Play background music
-      if (audioRef.current && voiceMode !== 'voice-only') {
-        audioRef.current.volume = isMuted ? 0 : musicVolume;
-        await audioRef.current.play();
-      }
+      audioRef.current.volume = isMuted ? 0 : volume;
+      audioRef.current.muted = isMuted;
+      await audioRef.current.play();
       setPlayingState(true);
-
-      // 2. Play vocal voice
-      if (isVoiceActive && voiceMode !== 'music-only') {
-        if (hymnVoiceEngine.isPausedState()) {
-          hymnVoiceEngine.resume();
-        } else if (!hymnVoiceEngine.isActive()) {
-          startVoiceForCurrentHymn();
-        }
-      }
     } catch {
       setPlayingState(false);
     }
-  }, [voiceMode, isMuted, musicVolume, setPlayingState, isVoiceActive, startVoiceForCurrentHymn]);
+  }, [isMuted, volume, setPlayingState]);
 
-  const pauseAll = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-    }
-    if (studioVoiceAudioRef.current) {
-      studioVoiceAudioRef.current.pause();
-    }
-    if (hymnVoiceEngine.isActive()) {
-      hymnVoiceEngine.pause();
-    }
+  const pauseCurrentAudio = useCallback(() => {
+    if (!audioRef.current) return;
+    audioRef.current.pause();
     setPlayingState(false);
   }, [setPlayingState]);
 
   const togglePlay = () => {
     setHasAutoStarted(true);
     if (isPlaying) {
-      pauseAll();
+      pauseCurrentAudio();
     } else {
-      playAll();
+      playCurrentAudio();
     }
   };
 
   const handleNextTrack = useCallback(() => {
-    hymnVoiceEngine.stop();
-    if (studioVoiceAudioRef.current) {
-      studioVoiceAudioRef.current.pause();
-    }
     const nextNum =
       activeHymnNumber < TOTAL_HYMNS_COUNT ? activeHymnNumber + 1 : 1;
     setActiveHymnNumber(nextNum);
@@ -325,10 +147,6 @@ export const AmbientMusicPlayer: React.FC<AmbientMusicPlayerProps> = ({
   }, [activeHymnNumber, setActiveHymnNumber, setPlayingState]);
 
   const handlePrevTrack = useCallback(() => {
-    hymnVoiceEngine.stop();
-    if (studioVoiceAudioRef.current) {
-      studioVoiceAudioRef.current.pause();
-    }
     const prevNum =
       activeHymnNumber > 1 ? activeHymnNumber - 1 : TOTAL_HYMNS_COUNT;
     setActiveHymnNumber(prevNum);
@@ -337,10 +155,6 @@ export const AmbientMusicPlayer: React.FC<AmbientMusicPlayerProps> = ({
 
   const handleRandomHymn = () => {
     setHasAutoStarted(true);
-    hymnVoiceEngine.stop();
-    if (studioVoiceAudioRef.current) {
-      studioVoiceAudioRef.current.pause();
-    }
     const randomNum = Math.floor(Math.random() * TOTAL_HYMNS_COUNT) + 1;
     setActiveHymnNumber(randomNum);
     setPlayingState(true);
@@ -353,63 +167,47 @@ export const AmbientMusicPlayer: React.FC<AmbientMusicPlayerProps> = ({
     const num = Number(cleaned);
     if (Number.isFinite(num) && num >= 1) {
       setHasAutoStarted(true);
-      hymnVoiceEngine.stop();
-      if (studioVoiceAudioRef.current) {
-        studioVoiceAudioRef.current.pause();
-      }
       setActiveHymnNumber(num);
       setPlayingState(true);
       setJumpInput('');
     }
   };
 
-  // Sync track changes & play/pause state
+  // Sync play/pause & track changes with the <audio> element
   useEffect(() => {
     if (!audioRef.current) return;
     if (isPlaying) {
-      if (voiceMode !== 'voice-only') {
-        audioRef.current.play().catch(() => {});
-      }
-      if (isVoiceActive && voiceMode !== 'music-only') {
-        startVoiceForCurrentHymn();
-      }
+      audioRef.current.play().catch(() => {
+        setPlayingState(false);
+      });
     } else {
       audioRef.current.pause();
-      if (studioVoiceAudioRef.current) {
-        studioVoiceAudioRef.current.pause();
-      }
-      hymnVoiceEngine.pause();
     }
-  }, [activeHymnNumber, currentTrack.mp3Url, isPlaying, voiceMode, isVoiceActive, startVoiceForCurrentHymn]);
+  }, [activeHymnNumber, currentTrack.mp3Url, isPlaying, setPlayingState]);
 
-  // First interaction auto-start
+  // Start playback automatically on user's first click anywhere on the page
   useEffect(() => {
     if (hasAutoStarted) return;
     const handleFirstInteraction = () => {
       if (!hasAutoStarted) {
         setHasAutoStarted(true);
-        playAll();
+        playCurrentAudio();
       }
     };
     window.addEventListener('click', handleFirstInteraction, { once: true });
     return () => {
       window.removeEventListener('click', handleFirstInteraction);
     };
-  }, [hasAutoStarted, playAll]);
+  }, [hasAutoStarted, playCurrentAudio]);
 
-  // Clean up voice on unmount
-  useEffect(() => {
-    return () => {
-      hymnVoiceEngine.stop();
-    };
-  }, []);
-
-  // Upload custom MP3 / voice file
-  const handleUploadMp3Files = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Upload custom MP3 files
+  const handleUploadMp3Files = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const fileList = e.target.files;
     if (!fileList || fileList.length === 0) return;
 
-    setUploadStatus('Guardando MP3 con voz...');
+    setUploadStatus('Guardando MP3...');
     const filesArray: File[] = Array.from(fileList);
     const nextOverrides = { ...customOverrides };
 
@@ -452,7 +250,7 @@ export const AmbientMusicPlayer: React.FC<AmbientMusicPlayerProps> = ({
     }
 
     setCustomOverrides(nextOverrides);
-    setUploadStatus('¡MP3 con voz actualizados!');
+    setUploadStatus('¡MP3 actualizados con éxito!');
     setPlayingState(true);
     window.setTimeout(() => setUploadStatus(''), 3500);
     e.target.value = '';
@@ -482,7 +280,7 @@ export const AmbientMusicPlayer: React.FC<AmbientMusicPlayerProps> = ({
 
   return (
     <div className="fixed bottom-5 left-5 z-40 flex flex-col items-start font-sans">
-      {/* Background Melody Audio Element */}
+      {/* Clean Native HTML5 Song Audio Element */}
       <audio
         ref={audioRef}
         src={currentTrack.mp3Url}
@@ -500,36 +298,21 @@ export const AmbientMusicPlayer: React.FC<AmbientMusicPlayerProps> = ({
         onEnded={handleNextTrack}
       />
 
-      {/* Studio Vocal Audio Element (when available from server) */}
-      <audio
-        ref={studioVoiceAudioRef}
-        src={`/api/hymn-voice/${activeHymnNumber}`}
-        preload="none"
-        onEnded={() => {
-          setActiveVoicedSection('complete');
-          setCurrentSectionLabel('Voz completada');
-          onVoicedSectionChange?.('complete');
-        }}
-      />
-
-      {/* Expanded Sung MP3 Playlist & Voice Mixer Panel */}
+      {/* Expanded Playlist & Controls Panel */}
       {isExpanded && (
-        <div className="mb-3 w-80 sm:w-96 bg-slate-950/98 backdrop-blur-md text-white border border-blue-700/80 rounded-2xl shadow-2xl p-4 sm:p-5 space-y-4 max-h-[85vh] overflow-y-auto">
+        <div className="mb-3 w-80 sm:w-96 bg-slate-950/98 backdrop-blur-md text-white border border-blue-800/80 rounded-2xl shadow-2xl p-4 sm:p-5 space-y-4 max-h-[85vh] overflow-y-auto">
           {/* Header */}
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
             <div className="flex items-center gap-2.5">
               <div className="p-1.5 bg-blue-600/30 border border-blue-500 rounded-lg">
-                <Mic className="w-4 h-4 text-blue-400 shrink-0" />
+                <Music className="w-4 h-4 text-blue-400 shrink-0" />
               </div>
               <div>
-                <p className="text-xs font-bold text-white flex items-center gap-1.5">
-                  <span>Himnos con Voz en Español</span>
-                  <span className="px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 text-[10px] font-mono rounded">
-                    Voz Activa
-                  </span>
+                <p className="text-xs font-bold text-white">
+                  Reproductor de Himnos Cristianos
                 </p>
                 <p className="text-[11px] text-blue-300">
-                  224.344.224 Canciones con Voz y Música
+                  224.344.224 Himnos · Canción Original
                 </p>
               </div>
             </div>
@@ -542,73 +325,7 @@ export const AmbientMusicPlayer: React.FC<AmbientMusicPlayerProps> = ({
             </button>
           </div>
 
-          {/* Voice Engine Mode Switcher: Both | Voice Only | Music Only */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="text-slate-300 font-semibold flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-blue-400" />
-                Modo de Reproducción de Voz
-              </span>
-              <button
-                type="button"
-                onClick={() => setVoiceActiveState(!isVoiceActive)}
-                className={`text-[11px] font-semibold px-2 py-0.5 rounded transition-colors ${
-                  isVoiceActive
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-slate-800 text-slate-400'
-                }`}
-              >
-                {isVoiceActive ? 'Voz: SÍ' : 'Voz: NO'}
-              </button>
-            </div>
-
-            <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-900 border border-slate-800 rounded-xl text-xs">
-              <button
-                type="button"
-                onClick={() => {
-                  setVoiceMode('both');
-                  if (!isVoiceActive) setVoiceActiveState(true);
-                }}
-                className={`py-1.5 px-2 rounded-lg text-center font-medium transition-all ${
-                  voiceMode === 'both' && isVoiceActive
-                    ? 'bg-blue-700 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Voz + Música
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setVoiceMode('voice-only');
-                  if (!isVoiceActive) setVoiceActiveState(true);
-                }}
-                className={`py-1.5 px-2 rounded-lg text-center font-medium transition-all ${
-                  voiceMode === 'voice-only' && isVoiceActive
-                    ? 'bg-blue-700 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Solo Voz
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setVoiceMode('music-only');
-                  setVoiceActiveState(false);
-                }}
-                className={`py-1.5 px-2 rounded-lg text-center font-medium transition-all ${
-                  voiceMode === 'music-only' || !isVoiceActive
-                    ? 'bg-slate-800 text-white'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Solo Música
-              </button>
-            </div>
-          </div>
-
-          {/* Now Playing Vocal Monitor */}
+          {/* Now Playing Card */}
           <div className="p-3.5 bg-slate-900/90 border border-blue-900/70 rounded-xl space-y-2.5">
             <div className="flex items-center justify-between gap-2">
               <span className="font-mono text-[11px] text-blue-400 font-semibold truncate">
@@ -628,23 +345,6 @@ export const AmbientMusicPlayer: React.FC<AmbientMusicPlayerProps> = ({
               </p>
             </div>
 
-            {/* Vocal Realtime Section Status Banner */}
-            <div className="flex items-center justify-between px-2.5 py-1.5 bg-blue-950/70 border border-blue-800/80 rounded-lg text-[11px]">
-              <span className="text-blue-300 font-medium flex items-center gap-1.5 truncate">
-                {isVoiceActive ? (
-                  <Mic className="w-3.5 h-3.5 text-blue-400 animate-pulse shrink-0" />
-                ) : (
-                  <MicOff className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                )}
-                <span className="truncate">
-                  {isVoiceActive ? currentSectionLabel : 'Voz pausada'}
-                </span>
-              </span>
-              <span className="font-mono text-[10px] text-blue-400 uppercase shrink-0">
-                {hasStudioAudio ? 'Voz Estudio IA' : 'Voz Natural'}
-              </span>
-            </div>
-
             {/* Progress Seek Bar */}
             <input
               type="range"
@@ -659,7 +359,7 @@ export const AmbientMusicPlayer: React.FC<AmbientMusicPlayerProps> = ({
                   audioRef.current.currentTime = newTime;
                 }
               }}
-              aria-label="Progreso del himno cantado con voz"
+              aria-label="Progreso de la canción"
               className="w-full accent-blue-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
             />
 
@@ -683,12 +383,12 @@ export const AmbientMusicPlayer: React.FC<AmbientMusicPlayerProps> = ({
                 {isPlaying ? (
                   <>
                     <Pause className="w-3.5 h-3.5 shrink-0" />
-                    <span>Pausar Himno</span>
+                    <span>Pausar</span>
                   </>
                 ) : (
                   <>
                     <Play className="w-3.5 h-3.5 fill-current shrink-0" />
-                    <span>Cantar con Voz</span>
+                    <span>Reproducir</span>
                   </>
                 )}
               </button>
@@ -705,101 +405,47 @@ export const AmbientMusicPlayer: React.FC<AmbientMusicPlayerProps> = ({
             </div>
           </div>
 
-          {/* Dual Volume Controls: Voice Volume & Background Music Volume */}
-          <div className="space-y-2.5 p-3 bg-slate-900/60 border border-slate-800 rounded-xl">
-            {/* Slider 1: Voice Volume */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="text-slate-300 font-semibold flex items-center gap-1.5">
-                  <Mic className="w-3.5 h-3.5 text-blue-400" />
-                  Volumen de la Voz:
-                </span>
-                <span className="font-mono text-blue-400 tabular-nums">
-                  {Math.round(voiceVolume * 100)}%
-                </span>
-              </div>
+          {/* Volume Control */}
+          <div className="p-3 bg-slate-900/60 border border-slate-800 rounded-xl space-y-1.5">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-slate-300 font-semibold flex items-center gap-1.5">
+                <Volume2 className="w-3.5 h-3.5 text-blue-400" />
+                Volumen de la Canción:
+              </span>
+              <span className="font-mono text-blue-400 tabular-nums">
+                {Math.round((isMuted ? 0 : volume) * 100)}%
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setIsMuted((prev) => !prev)}
+                className="p-1.5 text-slate-300 hover:text-white rounded bg-slate-900 border border-slate-800"
+                aria-label={isMuted ? 'Activar sonido' : 'Silenciar'}
+              >
+                {isMuted || volume === 0 ? (
+                  <VolumeX className="w-4 h-4 text-slate-400" />
+                ) : (
+                  <Volume2 className="w-4 h-4 text-blue-400" />
+                )}
+              </button>
               <input
                 type="range"
                 min={0}
                 max={1}
-                step={0.05}
-                value={voiceVolume}
-                onChange={(e) => setVoiceVolume(Number(e.target.value))}
-                aria-label="Volumen de la voz"
-                className="w-full accent-blue-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+                step={0.02}
+                value={isMuted ? 0 : volume}
+                onChange={(e) => {
+                  setIsMuted(false);
+                  setVolume(Number(e.target.value));
+                }}
+                aria-label="Volumen del reproductor"
+                className="flex-1 accent-blue-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
               />
             </div>
-
-            {/* Slider 2: Background Music Volume */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="text-slate-300 font-semibold flex items-center gap-1.5">
-                  <Music className="w-3.5 h-3.5 text-slate-400" />
-                  Música de Acompañamiento:
-                </span>
-                <span className="font-mono text-slate-400 tabular-nums">
-                  {Math.round(musicVolume * 100)}%
-                </span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={musicVolume}
-                onChange={(e) => setMusicVolume(Number(e.target.value))}
-                aria-label="Volumen del acompañamiento musical"
-                className="w-full accent-slate-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
-              />
-            </div>
-
-            {/* Voice Tone / Speed Selector */}
-            <div className="pt-1.5 flex items-center justify-between text-[11px]">
-              <span className="text-slate-400">Cadencia de la Voz:</span>
-              <div className="flex items-center gap-1">
-                {[
-                  { label: 'Solemne', rate: 0.88 },
-                  { label: 'Normal', rate: 0.95 },
-                  { label: 'Fluida', rate: 1.05 },
-                ].map((s) => (
-                  <button
-                    key={s.label}
-                    type="button"
-                    onClick={() => setVoiceRate(s.rate)}
-                    className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
-                      Math.abs(voiceRate - s.rate) < 0.05
-                        ? 'bg-blue-700 text-white'
-                        : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                    }`}
-                  >
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Spanish Voice Selector (if multiple available on device) */}
-            {availableVoices.length > 1 && (
-              <div className="pt-1">
-                <label className="block text-[10px] text-slate-400 mb-1">
-                  Voz en Español del Dispositivo:
-                </label>
-                <select
-                  value={selectedVoiceURI}
-                  onChange={(e) => setSelectedVoiceURI(e.target.value)}
-                  className="w-full px-2 py-1 bg-slate-950 border border-slate-700 rounded-lg text-[11px] text-white focus:outline-none focus:border-blue-500"
-                >
-                  {availableVoices.map((v) => (
-                    <option key={v.voiceURI} value={v.voiceURI}>
-                      {v.name} ({v.lang})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
           </div>
 
-          {/* Jump directly to any hymn #1 - 224,344,224 with voice */}
+          {/* Jump to any hymn #1 - 224,344,224 */}
           <form
             onSubmit={handleJumpFormSubmit}
             className="flex items-center gap-1.5"
@@ -819,7 +465,7 @@ export const AmbientMusicPlayer: React.FC<AmbientMusicPlayerProps> = ({
               type="submit"
               className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg transition-colors shrink-0"
             >
-              Cantar
+              Ir
             </button>
             <button
               type="button"
@@ -834,7 +480,7 @@ export const AmbientMusicPlayer: React.FC<AmbientMusicPlayerProps> = ({
           {/* Nearby Hymns List */}
           <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
             <p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wider px-1">
-              Canciones cercanas con voz:
+              Canciones cercanas:
             </p>
             {nearbyHymns.map((track) => {
               const isSelected = track.hymnNumber === activeHymnNumber;
@@ -844,10 +490,6 @@ export const AmbientMusicPlayer: React.FC<AmbientMusicPlayerProps> = ({
                   type="button"
                   onClick={() => {
                     setHasAutoStarted(true);
-                    hymnVoiceEngine.stop();
-                    if (studioVoiceAudioRef.current) {
-                      studioVoiceAudioRef.current.pause();
-                    }
                     setActiveHymnNumber(track.hymnNumber);
                     setPlayingState(true);
                   }}
@@ -911,7 +553,7 @@ export const AmbientMusicPlayer: React.FC<AmbientMusicPlayerProps> = ({
               ) : (
                 <>
                   <Upload className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                  <span>Subir tus propias grabaciones de voz o MP3</span>
+                  <span>Subir tus propios archivos MP3</span>
                 </>
               )}
             </button>
@@ -919,8 +561,8 @@ export const AmbientMusicPlayer: React.FC<AmbientMusicPlayerProps> = ({
         </div>
       )}
 
-      {/* Compact Floating Audio & Voice Dock */}
-      <div className="flex items-center gap-1.5 bg-slate-950/98 backdrop-blur-md text-white p-1.5 rounded-full shadow-2xl border border-blue-700/80">
+      {/* Compact Floating Audio Dock */}
+      <div className="flex items-center gap-1.5 bg-slate-950/98 backdrop-blur-md text-white p-1.5 rounded-full shadow-2xl border border-blue-800/80">
         {/* Play / Pause Toggle Button */}
         <button
           type="button"
@@ -945,28 +587,9 @@ export const AmbientMusicPlayer: React.FC<AmbientMusicPlayerProps> = ({
             </>
           ) : (
             <>
-              <Mic className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-              <span>Cantar #{currentTrack.formattedNumber} con Voz</span>
+              <Music className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+              <span>#{currentTrack.formattedNumber} · {currentTrack.title}</span>
             </>
-          )}
-        </button>
-
-        {/* Quick Voice Toggle Pill */}
-        <button
-          type="button"
-          onClick={() => setVoiceActiveState(!isVoiceActive)}
-          className={`p-2 rounded-full transition-colors ${
-            isVoiceActive
-              ? 'bg-blue-900/80 text-blue-300 hover:bg-blue-800'
-              : 'bg-slate-900 text-slate-500 hover:text-white'
-          }`}
-          title={isVoiceActive ? 'Voz del himno activa (clic para silenciar voz)' : 'Activar voz del himno'}
-          aria-label={isVoiceActive ? 'Silenciar voz del himno' : 'Activar voz del himno'}
-        >
-          {isVoiceActive ? (
-            <Mic className="w-3.5 h-3.5 text-blue-400" />
-          ) : (
-            <MicOff className="w-3.5 h-3.5" />
           )}
         </button>
 
@@ -975,8 +598,8 @@ export const AmbientMusicPlayer: React.FC<AmbientMusicPlayerProps> = ({
           type="button"
           onClick={handleNextTrack}
           className="p-2 text-slate-300 hover:text-white rounded-full hover:bg-slate-900 transition-colors"
-          aria-label="Siguiente himno cantado con voz"
-          title="Siguiente himno cantado con voz"
+          aria-label="Siguiente himno"
+          title="Siguiente himno"
         >
           <SkipForward className="w-3.5 h-3.5 text-blue-400" />
         </button>
@@ -986,8 +609,8 @@ export const AmbientMusicPlayer: React.FC<AmbientMusicPlayerProps> = ({
           type="button"
           onClick={() => setIsExpanded((prev) => !prev)}
           className="p-2 text-slate-300 hover:text-white rounded-full hover:bg-slate-900 transition-colors"
-          aria-label="Ajustar voz, volumen y catálogo de himnos"
-          title="Ajustar voz, volumen y catálogo de himnos"
+          aria-label="Ajustar volumen y catálogo de himnos"
+          title="Ajustar volumen y catálogo de himnos"
         >
           <Sliders className="w-3.5 h-3.5 text-blue-400" />
         </button>
