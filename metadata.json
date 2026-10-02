@@ -1,0 +1,8 @@
+{
+  "name": " Iglesia Discípulos de Cristo de San Gil",
+  "description": "Sitio web oficial de la Iglesia Discípulos de Cristo de San Gil (Villa Olímpica). Horarios de cultos, reunión de varones, reunión de damas, discipulados personalizados, consejería, transmisiones en vivo por YouTube (@IEDCCSanGil) y atención inmediata por WhatsApp.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
